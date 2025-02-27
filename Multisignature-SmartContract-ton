@@ -1,0 +1,62 @@
+; Структура данных для подписанта
+struct Signer {
+    addr u. ; Адрес подписанта
+    weight u. ; Вес подписи (может быть разным для разных подписантов)
+}
+
+; Структура данных для подписи
+struct Signature {
+    signer u. ; Индекс подписанта в массиве signers
+    operation_hash u. ; Хэш операции, которую подписали
+}
+
+; Массивы для хранения подписантов и подписей
+var signers = [] ; Список подписантов
+var signatures = [] ; Список текущих подписей
+
+; Константы для настройки мультисигнатурной схемы
+constant required_signatures# = 2 ; Необходимое количество подписей
+constant operation_timeout# = 3600 ; Тайм-аут для операции в секундах
+
+; Функция для добавления подписантов
+func add_signer {
+    #arg1 .xref >S addr
+    #arg2 .xref >S weight
+    
+    ; Проверить, что отправитель - владелец контракта
+    is_owner
+    
+    ; Добавить подписанта в список
+    append(signers, Signer(addr, weight))
+}
+
+; Функция для подписания операции
+func sign_operation {
+    #arg1 .xref >S operation_hash
+    
+    ; Проверить, что отправитель - подписант
+    signer_index = find_index(signers, signer => signer.addr == sender)
+    signer_index exists ifnot { throw }
+    
+    ; Проверить, что операция ещё не подписана данным подписантом
+    existing_signature = find(signatures, signature => signature.signer == signer_index && signature.operation_hash == operation_hash)
+    existing_signature exists if { throw }
+    
+    ; Добавить подпись
+    append(signatures, Signature(signer_index, operation_hash))
+}
+
+; Функция для выполнения операции с использованием мультисигнатурного механизма
+func multisig_execute_operation {
+    #arg1 .xref >S operation_hash
+    
+    ; Проверить, что собрано достаточное количество подписей
+    matching_signatures = count(signatures, signature => signature.operation_hash == operation_hash)
+    matching_signatures >= required_signatures ifnot { throw }
+    
+    ; Выполнить операцию
+    execute_operation(operation_hash)
+    
+    ; Очистить подписи для данной операции
+    signatures = filter(signatures, signature => signature.operation_hash != operation_hash)
+}
